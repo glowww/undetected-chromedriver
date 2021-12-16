@@ -619,7 +619,7 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
 
         except TimeoutError as e:
             logger.debug(e, exc_info=True)
-        except Exception as e:  # noqa
+        except Exception:  # noqa
             pass
 
         if (
