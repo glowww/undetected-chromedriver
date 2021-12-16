@@ -4,15 +4,16 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
 import re
 import shutil
+import signal
 import sys
 import tempfile
 import time
-import inspect
 
 import requests
 import selenium.webdriver.chrome.service
@@ -38,8 +39,6 @@ __all__ = (
 
 logger = logging.getLogger("uc")
 logger.setLevel(logging.getLogger().getEffectiveLevel())
-
-from .dprocess import start_detached
 
 
 class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
@@ -97,6 +96,7 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
             delay=5,
             version_main=None,
             patcher_force_close=False,
+            detached=True
     ):
         """
         Creates a new instance of the chrome driver.
@@ -296,15 +296,17 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
         if not desired_capabilities:
             desired_capabilities = options.to_capabilities()
 
-        self.browser_pid = start_detached(options.binary_location, *options.arguments)
-
-        # self.browser = subprocess.Popen(
-        #     [options.binary_location, *options.arguments],
-        #     stdin=subprocess.PIPE,
-        #     stdout=subprocess.PIPE,
-        #     stderr=subprocess.PIPE,
-        #     close_fds=IS_POSIX,
-        # )
+        self.detached = detached
+        if detached:
+            self.browser_pid = start_detached(options.binary_location, *options.arguments)
+        else:
+            self.browser = subprocess.Popen(
+                 [options.binary_location, *options.arguments],
+                 stdin=subprocess.PIPE,
+                 stdout=subprocess.PIPE,
+                 stderr=subprocess.PIPE,
+                 close_fds=IS_POSIX,
+            )
 
         super(Chrome, self).__init__(
             executable_path=patcher.executable_path,
@@ -609,13 +611,15 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
             pass
         try:
             logger.debug("killing browser")
-            os.kill(self.browser_pid)
-            # self.browser.terminate()
-            # self.browser.wait(1)
+            if self.detached:
+                os.kill(self.browser_pid, signal.SIGTERM)
+            else:
+                self.browser.terminate()
+                self.browser.wait(1)
 
         except TimeoutError as e:
             logger.debug(e, exc_info=True)
-        except Exception:  # noqa
+        except Exception as e:  # noqa
             pass
 
         if (
